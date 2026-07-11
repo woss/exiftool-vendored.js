@@ -38,40 +38,12 @@
     "update:install": "npm install",
     "install:pinact": "go install github.com/suzuki-shunsuke/pinact/v3/cmd/pinact@latest",
     "update:actions": "pinact run -u --min-age 7",
-    "all": "run-s clean update fmt lint docs:build test",
-    "release": "release-it"
+    "all": "run-s clean update fmt lint docs:build test"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/photostructure/exiftool-vendored.js.git"
   },
-  "release-it": {
-    "hooks": {
-      "before:init": [
-        "npm ci",
-        "npm run clean",
-        "npm run compile"
-      ]
-    },
-    "src": {
-      "tagName": "v%s",
-      "commitArgs": "--gpg-sign",
-      "tagArgs": "--sign"
-    },
-    "git": {
-      "requireBranch": "main",
-      "commitMessage": "Release ${version}",
-      "tagName": "${version}"
-    },
-    "github": {
-      "release": true
-    },
-    "npm": {
-      "publish": true,
-      "skipChecks": true
-    }
-  },
-  "# release-it.npm.skipChecks": "Required for OIDC Trusted Publishing - bypasses npm auth checks since OIDC handles authentication automatically. See: https://github.com/release-it/release-it/issues/1244 and https://docs.npmjs.com/trusted-publishers#supported-cicd-providers",
   "keywords": [
     "ExifTool",
     "EXIF",
@@ -117,18 +89,17 @@
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-redos": "^4.5.0",
-    "eslint-plugin-regexp": "^3.1.0",
+    "eslint-plugin-regexp": "^3.1.1",
     "extract-zip": "^2.0.1",
     "geo-tz": "^8.1.7",
     "globals": "^17.7.0",
     "globule": "^1.3.4",
     "mocha": "^11.7.5",
-    "npm-check-updates": "^20.0.0",
+    "npm-check-updates": "^22.2.9",
     "npm-run-all2": "9.0.2",
     "prettier": "^3.8.3",
     "prettier-plugin-organize-imports": "^4.3.0",
     "progress": "^2.0.3",
-    "release-it": "^20.0.1",
     "rimraf": "^6.1.3",
     "serve": "^14.2.6",
     "source-map-support": "^0.5.21",

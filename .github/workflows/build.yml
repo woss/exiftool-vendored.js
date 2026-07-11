@@ -57,12 +57,12 @@ jobs:
     needs: [lint, build]
     if: ${{ github.event_name == 'workflow_dispatch' }}
     permissions:
-      id-token: write # Required for OIDC
-      contents: write # Required for release-it to create tags/commits
+      id-token: write # Required for OIDC trusted publishing
+      contents: write # Required to push the version commit/tag and create the release
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          fetch-depth: 0 # Need full history for release-it
+          fetch-depth: 0 # Need full history to push the version commit and tag
           lfs: true
 
       # setup-node with registry-url is required for OIDC trusted publishing
@@ -91,10 +91,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Note: Tests are run by release-it's before:init hook via npm run lint
-      # This avoids running the full test matrix (9+ OS/Node combinations) in the release workflow
-      # The lint script is sufficient for release validation since full tests already passed
-      - name: Release with release-it
-        run: npm run release -- --ci ${{ github.event.inputs.version }}
+      # The full test matrix already ran in the lint and build jobs; lint here
+      # is a final gate on the exact commit being published (npm ci already
+      # compiled dist via the prepare script).
+      - name: Lint
+        run: npm run lint
+
+      - name: Bump version and create tag
+        run: |
+          npm version "${{ github.event.inputs.version }}" --sign-git-tag -m "Release %s"
+          echo "NEW_VERSION=$(npm pkg get version | tr -d '\"')" >> "$GITHUB_ENV"
+
+      - name: Push changes and tags
+        run: |
+          git push origin HEAD:main
+          git push origin --tags
+
+      - name: Create GitHub Release
+        run: gh release create "${{ env.NEW_VERSION }}" --title "Release ${{ env.NEW_VERSION }}" --generate-notes
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to npm with OIDC
+        run: npm publish --provenance

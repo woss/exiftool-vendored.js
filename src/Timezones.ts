@@ -99,8 +99,7 @@ export const ValidTimezoneOffsets = [
 ] as const;
 
 export type TimezoneOffset = (
-  | typeof ValidTimezoneOffsets
-  | typeof ArchaicTimezoneOffsets
+  typeof ValidTimezoneOffsets | typeof ArchaicTimezoneOffsets
 )[number];
 
 /**

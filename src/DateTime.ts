@@ -14,10 +14,7 @@ export const HourMs = 60 * MinuteMs;
 export const DayMs = 24 * HourMs;
 
 export type DateOrTime =
-  | ExifDateTime
-  | ExifDate
-  | ExifTime
-  | DateTimeMaybeValid;
+  ExifDateTime | ExifDate | ExifTime | DateTimeMaybeValid;
 
 export function isDateOrTime(o: unknown): o is DateOrTime {
   return (

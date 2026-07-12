@@ -35,6 +35,10 @@ vendored versions of ExifTool match the version that they vendor.
 
 ## History
 
+### v36.1.0
+
+- ✨ Added `ExifTool.editTags()` for validated exact list-value additions/removals, MWG Collection additions/predicate removals, and audited scalar or flattened person-name removals without replacing unrelated metadata. See the [usage examples](docs/USAGE-EXAMPLES.md#editing-individual-tag-values).
+
 ### v36.0.0
 
 - 🏚️ **Dropped Node.js 20 from the supported engines and CI matrix.** Node.js 20 ("Iron") has reached [end-of-life](https://github.com/nodejs/release#release-schedule), so the minimum supported runtime is now Node.js 22 (`engines.node` is `>=22`). The CI test matrix is now Node.js 22, 24, and 26.

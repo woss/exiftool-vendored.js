@@ -96,6 +96,10 @@ await exiftool.write("photo.jpg", {
 });
 ```
 
+For targeted list-value and supported structured edits, use `editTags()`. See
+[Editing Individual Tag Values](docs/USAGE-EXAMPLES.md#editing-individual-tag-values)
+for examples, supported tags, and safety constraints.
+
 ### Extracting Images
 
 ```javascript

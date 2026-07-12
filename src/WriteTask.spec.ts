@@ -21,6 +21,7 @@ import {
 } from "./ExifToolVendoredTags";
 import { isFileEmpty } from "./File";
 import { omit } from "./Object";
+import { RawTags } from "./RawTags";
 import { ResourceEvent } from "./ResourceEvent";
 import { isSidecarExt } from "./Sidecars";
 import { stripSuffix } from "./String";
@@ -1046,6 +1047,30 @@ describe("WriteTask", function () {
 describe("WriteTask (simpler)", () => {
   const exiftool = new ExifTool();
   after(() => end(exiftool));
+
+  async function readXmpDescription(file: string): Promise<unknown> {
+    const tags = (await exiftool.readRaw(file, {
+      readArgs: ["-G1", "-XMP-dc:Description"],
+    })) as unknown as RawTags;
+    return tags["XMP-dc:Description"];
+  }
+
+  it("removes an existing property when writing an ordinary empty string", async () => {
+    const file = await testFile("empty-description.xmp");
+    await exiftool.write(file, { "XMP-dc:Description": "seed" } as WriteTags);
+
+    await exiftool.write(file, { "XMP-dc:Description": "" } as WriteTags);
+
+    expect(await readXmpDescription(file)).to.eql(undefined);
+  });
+
+  it("force-writes a present-but-empty property with the caret suffix", async () => {
+    const file = await testFile("forced-empty-description.xmp");
+
+    await exiftool.write(file, { "XMP-dc:Description^": "" } as WriteTags);
+
+    expect(await readXmpDescription(file)).to.eql("");
+  });
 
   describe("GPS coordinate writing", () => {
     // Test coordinates covering all hemispheres:

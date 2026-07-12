@@ -29,6 +29,7 @@ import { ReadTask, ReadTaskOptionFields, ReadTaskOptions } from "./ReadTask";
 import { RewriteAllTagsTask } from "./RewriteAllTagsTask";
 import { Settings } from "./Settings";
 import { blank, isString, notBlank } from "./String";
+import { TagEdit } from "./TagEdit";
 import { validateTagName } from "./TagNameValidation";
 import { Tags } from "./Tags";
 import { VersionTask } from "./VersionTask";
@@ -134,6 +135,26 @@ export type { UnsubscribeFunction } from "./Settings";
 export type { ShortcutTags } from "./ShortcutTags";
 export type { Struct } from "./Struct";
 export type { TagDescription, TagDescriptionsOptions } from "./TagDescriptions";
+export {
+  CollectionEditTagName,
+  RegionNameEditTagName,
+  TagEditAddTagNames,
+  TagEditRemoveOnlyTagNames,
+  TagEditTagNames,
+  TagEditValueTagNames,
+} from "./TagEdit";
+export type {
+  AddCollectionEdit,
+  AddTagEdit,
+  CollectionPredicate,
+  RemoveCollectionEdit,
+  RemoveTagEdit,
+  TagEdit,
+  TagEditAddTagName,
+  TagEditRemoveOnlyTagName,
+  TagEditTagName,
+  TagEditValueTagName,
+} from "./TagEdit";
 export type {
   APPTags,
   CompositeTags,
@@ -524,6 +545,49 @@ export class ExifTool {
     // timestamps by an hour)
     const retriable = false;
     return this.enqueueTask(() => WriteTask.for(file, tags, opts), retriable);
+  }
+
+  /**
+   * Add or remove individual metadata values without replacing unrelated list
+   * items. Arguments are emitted in the provided order in one non-retriable
+   * ExifTool write command, but ExifTool applies removals before additions for
+   * the same tag.
+   *
+   * Tag names must be entries in {@link TagEditTagNames}. The primitive subset
+   * is {@link TagEditValueTagNames}; {@link TagEditAddTagNames} and
+   * {@link TagEditRemoveOnlyTagNames} distinguish add-capable lists from
+   * audited scalar and flattened structure fields. Structured values and
+   * predicates are supported only for the closed schemas explicitly typed by
+   * {@link TagEdit}. Each primitive operation accepts one non-empty, exactly
+   * preservable string value; repeat operations to preserve duplicate
+   * additions. A remove operation deletes every exact matching value. Values
+   * are literal text and HTML entity sequences are not decoded, unlike the
+   * legacy behavior of {@link ExifTool.write}.
+   *
+   * This API does not set, clear, or force-write empty tags. Continue using
+   * {@link ExifTool.write} for whole-tag writes and deletion with `null`.
+   *
+   * @param file an existing file or writable sidecar path
+   * @param edits one or more ordered add/remove operations
+   * @param options overrides to the configured write-task options. `-api` and
+   * `-sep`/`-separator` write arguments are rejected because they can alter
+   * edit semantics.
+   */
+  editTags(
+    file: string,
+    edits: readonly TagEdit[],
+    options?: WriteTaskOptions,
+  ): Promise<WriteTaskResult> {
+    const opts = {
+      ...pick(this.options, ...WriteTaskOptionFields),
+      ...options,
+    };
+
+    // Edits such as additions are not necessarily idempotent.
+    return this.enqueueTask(
+      () => WriteTask.forTagEdits(file, edits, opts),
+      false,
+    );
   }
 
   /**

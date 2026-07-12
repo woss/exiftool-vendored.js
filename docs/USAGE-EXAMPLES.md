@@ -104,6 +104,105 @@ await exiftool.write("photo.jpg", {
 });
 ```
 
+### Editing Individual Tag Values
+
+Use `editTags()` to add or remove individual list values without replacing
+unrelated metadata. Tag names must be canonical entries in the exported
+`TagEditTagNames` allowlist. `TagEditValueTagNames` contains the primitive
+remove-capable subset; `TagEditAddTagNames` contains the add-capable list tags;
+and `TagEditRemoveOnlyTagNames` contains audited scalar and flattened structure
+fields. `XMP-mwg-coll:Collections` is the one supported structured tag. Each
+primitive operation accepts one value. Arguments are emitted in the provided
+order, but ExifTool applies removals before additions for the same tag:
+
+```javascript
+await exiftool.editTags("photo.jpg", [
+  {
+    tag: "XMP-dc:Subject",
+    operation: "remove",
+    value: "beach",
+  },
+  {
+    tag: "XMP-dc:Subject",
+    operation: "add",
+    value: "forest",
+  },
+]);
+```
+
+`remove` deletes every exact matching value. ExifTool Bags are unordered, and
+`add` does not deduplicate values. Repeat an operation when duplicate additions
+are intentional. Remove-then-add for the same tag and value is supported as a
+one-write normalization that removes duplicates and leaves one value.
+Add-then-remove is rejected because ExifTool still applies the removal first
+and would leave the value present. Primitive values must be non-empty and
+contain only Unicode that ExifTool can preserve exactly. Leading spaces and
+literal HTML entities are preserved. Edit values are always literal text: for
+example, `"A &amp; B"` stores those exact nine characters. `write()` retains
+its older behavior and may interpret valid HTML entity sequences, so read the
+stored value before moving an entity-containing value between the two APIs.
+
+Structured edits are intentionally limited to schemas validated by this
+package. Adding an MWG Collection requires both fields, while removal accepts a
+non-empty predicate containing either or both fields:
+
+```javascript
+await exiftool.editTags("photo.jpg", [
+  {
+    tag: "XMP-mwg-coll:Collections",
+    operation: "add",
+    value: {
+      CollectionName: "Portfolio",
+      CollectionURI: "urn:portfolio",
+    },
+  },
+  {
+    tag: "XMP-mwg-coll:Collections",
+    operation: "remove",
+    predicate: { CollectionName: "Vacation" },
+  },
+]);
+```
+
+The entire edit array is snapshotted and validated before ExifTool is invoked.
+If any operation is invalid, no metadata is written.
+
+The allowlist covers audited, qualified Subject, HierarchicalSubject,
+Keywords, CatalogSets, People, PersonInImage, TagsList, LastKeywordXMP, and
+region/person-name fields, plus the XMP Dynamic Media Album scalar. Album and
+the flattened structure fields are remove-only. Other tags and aliases are
+rejected before ExifTool runs; this prevents `+=` or `-=` from unexpectedly
+incrementing numbers, shifting dates, or editing multiple physical properties.
+
+Most `WriteTaskOptions` remain available. `writeArgs` entries for `-api` and
+`-sep`/`-separator` are rejected because they can change exact matching, list
+splitting, or duplicate behavior.
+
+For MWG and ACDSee face labels, removing a flattened name preserves the face
+and its detection geometry. Because ExifTool removes every matching name,
+first verify that the same name is not used by an unrelated non-face region:
+
+```javascript
+await exiftool.editTags("photo.jpg", [
+  {
+    tag: "XMP-mwg-rs:RegionName",
+    operation: "remove",
+    value: "Jane",
+  },
+]);
+```
+
+The other audited remove-only fields are
+`XMP-acdsee-rs:ACDSeeRegionName`, `XMP-MP:RegionPersonDisplayName`, and
+`XMP-xmpDM:Album`. Flattened-name removals preserve remaining sibling fields;
+ExifTool may prune a region and its container if the removed name was their
+only field. Album removal matches the scalar value exactly.
+`XMP-iptcExt:PersonInImageName` remains unsupported because removing its
+`x-default` value also removes nonmatching alternate-language values.
+
+`editTags()` does not replace `write()`: whole-tag deletion still uses
+`null`, and ordered set/clear/forced-empty operations are not supported.
+
 ### Batch Updates with AllDates
 
 ```javascript

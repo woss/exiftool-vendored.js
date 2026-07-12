@@ -13,6 +13,7 @@ import { keys } from "./Object";
 import { pick } from "./Pick";
 import { isString, splitLines } from "./String";
 import { isStruct } from "./Struct";
+import { TagEdit, validateTagEdits } from "./TagEdit";
 import { validateTagName } from "./TagNameValidation";
 import { WriteTags } from "./WriteTags";
 
@@ -29,7 +30,11 @@ export function htmlEncode(s: string): string {
   );
 }
 
-function enc(o: unknown, structValue = false): Maybe<string> {
+function enc(
+  o: unknown,
+  structValue = false,
+  htmlDecodeLayers = 0,
+): Maybe<string> {
   if (o == null) {
     return "";
   } else if (isNumber(o)) {
@@ -39,20 +44,38 @@ function enc(o: unknown, structValue = false): Maybe<string> {
   } else if (isString(o)) {
     // Structs need their own escaping here.
     // See https://exiftool.org/struct.html#Serialize
-    return htmlEncode(
-      structValue ? o.replace(/[,[\]{}|]/g, (ea) => "|" + ea) : o,
-    );
+    const structurallyEscaped = structValue
+      ? (htmlDecodeLayers > 0 && /^\s/.test(o) ? "|" : "") +
+        o.replace(/[,[\]{}|]/g, (ea) => "|" + ea)
+      : o;
+    let entityProtected = structurallyEscaped;
+    for (let i = 0; i < htmlDecodeLayers; i++) {
+      entityProtected = entityProtected.replace(/&/g, "&#38;");
+    }
+    if (
+      !structValue &&
+      htmlDecodeLayers > 0 &&
+      entityProtected.startsWith(" ")
+    ) {
+      entityProtected = "&#32;" + entityProtected.slice(1);
+    }
+    return htmlEncode(entityProtected);
   } else if (isDateOrTime(o)) {
     return toExifString(o);
   } else if (Array.isArray(o)) {
     const primitiveArray = o.every((ea) => isString(ea) || isNumber(ea));
     return primitiveArray
-      ? `${o.map((ea) => enc(ea)).join(sep)}`
-      : `[${o.map((ea) => enc(ea)).join(",")}]`;
+      ? `${o.map((ea) => enc(ea, false, htmlDecodeLayers)).join(sep)}`
+      : `[${o.map((ea) => enc(ea, false, htmlDecodeLayers)).join(",")}]`;
   } else if (isStruct(o)) {
     // See https://exiftool.org/struct.html#Serialize
     return `{${keys(o)
-      .map((k) => enc(k, true) + "=" + enc(o[k], true))
+      .map(
+        (k) =>
+          enc(k, true, htmlDecodeLayers) +
+          "=" +
+          enc(o[k], true, htmlDecodeLayers),
+      )
       .join(",")}}`;
   } else {
     throw new Error("cannot encode " + JSON.stringify(o));
@@ -136,26 +159,6 @@ export class WriteTask extends ExifToolTask<WriteTaskResult> {
     tags: WriteTags,
     options: Partial<WriteTaskOptions> & Required<ExifToolTaskOptions>,
   ): WriteTask {
-    const sourceFile = _path.resolve(filename);
-
-    const args: string[] = [
-      // ensure exiftool thinks this is a write command:
-      ...Utf8FilenameCharsetArgs,
-      `-sep`,
-      `${sep}`,
-      "-E", // < html encoding https://exiftool.org/faq.html#Q10
-    ];
-
-    // "undef" doesn't work: but undef works the same as 2
-    args.push(
-      "-api",
-      "struct=" + (isNumber(options?.struct) ? options.struct : "2"),
-    );
-
-    if (options?.useMWG ?? DefaultWriteTaskOptions.useMWG) {
-      args.push("-use", "MWG");
-    }
-
     // Special handling for GPSLatitude and GPSLongitude (due to differences
     // in EXIF, XMP, and MIE encodings). See
     // https://exiftool.org/forum/index.php?topic=14488.0 and
@@ -202,6 +205,63 @@ export class WriteTask extends ExifToolTask<WriteTaskResult> {
       validateTagName(key);
       const val = tags[key];
       fieldsToSet.push(`-${key}=${enc(val)}`);
+    }
+
+    return WriteTask.#forFields(filename, fieldsToSet, options);
+  }
+
+  /**
+   * Creates a WriteTask for ordered add/remove tag edits.
+   */
+  static forTagEdits(
+    filename: string,
+    edits: readonly TagEdit[],
+    options: Partial<WriteTaskOptions> & Required<ExifToolTaskOptions>,
+  ): WriteTask {
+    for (const arg of toArray(options.writeArgs)) {
+      if (/^-(?:api|sep)/i.test(arg)) {
+        throw new Error(
+          `writeArgs argument is not compatible with exact tag edits: ${arg}`,
+        );
+      }
+    }
+    const validatedEdits = validateTagEdits(edits);
+
+    const fieldsToSet = validatedEdits.map((edit) => {
+      const operator = edit.operation === "add" ? "+" : "-";
+      const value = "predicate" in edit ? edit.predicate : edit.value;
+      // ExifTool applies -E once while parsing the command and once more while
+      // parsing serialized structure fields. Protect caller-provided entities
+      // once per decode so they remain literal metadata text.
+      const htmlDecodeLayers = isStruct(value) ? 2 : 1;
+      return `-${edit.tag}${operator}=${enc(value, false, htmlDecodeLayers)}`;
+    });
+
+    return WriteTask.#forFields(filename, fieldsToSet, options);
+  }
+
+  static #forFields(
+    filename: string,
+    fieldsToSet: string[],
+    options: Partial<WriteTaskOptions> & Required<ExifToolTaskOptions>,
+  ): WriteTask {
+    const sourceFile = _path.resolve(filename);
+    const args: string[] = [
+      // ensure exiftool thinks this is a write command:
+      ...Utf8FilenameCharsetArgs,
+      `-sep`,
+      `${sep}`,
+      "-E", // < html encoding https://exiftool.org/faq.html#Q10
+    ];
+
+    // "undef" doesn't work: but undef works the same as 2
+    args.push(
+      "-api",
+      "struct=" + (isNumber(options?.struct) ? options.struct : "2"),
+    );
+
+    if (options?.useMWG ?? DefaultWriteTaskOptions.useMWG) {
+      args.push("-use", "MWG");
     }
 
     if (fieldsToSet.length === 0) {

@@ -104,16 +104,21 @@ const exiftool = new ExifTool({
 
 ## Resource Cleanup
 
-As of v35, Node.js will exit naturally without calling `.end()` — child processes are cleaned up automatically.
+With the default settings, ExifTool workers no longer keep Node.js alive after
+awaited work finishes. During normal shutdown, the library attempts to clean up
+workers automatically. Abrupt termination, such as `SIGKILL` or an operating-
+system crash, cannot run cleanup handlers.
 
-For **long-running applications** (servers, daemons), calling `.end()` is still recommended for graceful shutdown. You can use disposables (TypeScript 5.2+) or manual cleanup:
+Call and await `.end()` when cleanup must finish before your application
+continues or exits. You can use asynchronous disposal (TypeScript 5.2+) or
+manual cleanup:
 
 ```javascript
 // Disposables (TypeScript 5.2+)
 {
   await using exiftool = new ExifTool();
   const tags = await exiftool.read("photo.jpg");
-} // Automatic cleanup
+} // Cleanup is awaited here
 
 // Manual cleanup
 const exiftool = new ExifTool();

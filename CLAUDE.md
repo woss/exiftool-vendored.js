@@ -53,7 +53,8 @@ npm run release     # Run release process (requires proper permissions)
 ## Important Notes
 
 - Always run `npm run compile` before testing
-- As of v35, `.end()` is optional for scripts (Node.js exits naturally), but recommended for long-running apps
+- With default settings, `.end()` is optional after awaited script work, but it
+  should be awaited when cleanup must finish before the application continues or exits
 - Tag interfaces not comprehensive - less common tags may exist in returned objects
 - Uses batch processing with automatic process pool management
 - TypeScript union type limits require careful tag selection

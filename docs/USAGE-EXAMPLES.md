@@ -13,7 +13,7 @@ import { exiftool } from "exiftool-vendored";
 // Verify installation
 console.log(`ExifTool v${await exiftool.version()}`);
 
-// Optional: graceful shutdown (Node.js will exit naturally without this as of v35)
+// Optional here; await this when cleanup must finish before continuing or exiting
 await exiftool.end();
 ```
 
@@ -279,13 +279,14 @@ console.log(restoredTags.DateTimeOriginal instanceof ExifDateTime); // true
 
 ## Resource Management
 
-Node.js will not exit cleanly while any `ExifTool` instance has any running `exiftool` child processes due to the way that Node.js handles stdin/stdout/stderr streams.
+With the default settings, ExifTool workers no longer keep Node.js alive after
+awaited work finishes. During normal shutdown, the library attempts to clean up
+workers automatically. Abrupt termination, such as `SIGKILL` or an operating-
+system crash, cannot run cleanup handlers.
 
-At least with this library, it's up to you end what you start.
-
-**Note**: depending on the platform, starting and ending an `exiftool` instance may be (very!) time consuming (like, 5-30 seconds on Windows), so ultrathink your code a bit to ensure you aren't spawning and killing exiftool instances needlessly.
-
-_yes I said ultrathink as if it was Proper English but you know you thought it was funny_
+Call and await `.end()` when cleanup must finish before your application
+continues or exits. Startup time varies widely with the OS, hardware, and
+security software, so avoid repeatedly creating and disposing instances.
 
 ### Manual Cleanup
 
@@ -311,35 +312,22 @@ try {
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM"]
+    "lib": ["ES2022", "ESNext.Disposable", "DOM"]
   }
 }
 ```
 
-#### Synchronous Disposal
+#### Non-blocking Disposal
 
 ```javascript
 import { ExifTool } from "exiftool-vendored";
 
-// Block scope with automatic cleanup
+// Block scope with automatic cleanup initiation
 {
   using et = new ExifTool();
   const tags = await et.read("photo.jpg");
   console.log(`Camera: ${tags.Make} ${tags.Model}`);
-  // ExifTool.end(false) called automatically when block exits
-}
-
-// Multiple files with automatic cleanup
-function processPhotos(filePaths) {
-  using et = new ExifTool({ maxProcs: 4 });
-
-  return Promise.all(
-    filePaths.map(async (file) => {
-      const tags = await et.read(file);
-      return { file, camera: `${tags.Make} ${tags.Model}` };
-    }),
-  );
-  // Cleanup happens even if Promise.all() throws
+  // Graceful cleanup starts when the block exits, but is not awaited
 }
 ```
 
@@ -348,7 +336,7 @@ function processPhotos(filePaths) {
 ```javascript
 import { ExifTool } from "exiftool-vendored";
 
-// Graceful cleanup with timeout protection
+// Graceful cleanup that is awaited when the scope exits
 {
   await using et = new ExifTool();
 
@@ -359,8 +347,7 @@ import { ExifTool } from "exiftool-vendored";
     Copyright: "© 2024",
   });
 
-  // ExifTool.end(true) called automatically with timeout protection
-  // If graceful cleanup times out, forceful cleanup is attempted
+  // Graceful cleanup is awaited when the block exits
 }
 
 // Function with automatic cleanup
@@ -388,7 +375,7 @@ async function batchProcessPhotos(filePaths) {
   }
 
   return results;
-  // Automatic cleanup happens here, even with exceptions
+  // Cleanup is awaited here, including when an exception leaves the scope
 }
 ```
 
@@ -414,11 +401,14 @@ async function robustProcessing(file) {
     }
     throw error;
   }
-  // ExifTool cleanup guaranteed, even with exceptions
+  // Async disposal is awaited before an exception leaves this scope
 }
 ```
 
-#### Configurable Disposal Timeouts
+#### Disposal Timeout Settings
+
+These settings control when the library requests fallback cleanup. They are not
+a hard guarantee that cleanup will complete within the configured duration.
 
 ```javascript
 import { ExifTool } from "exiftool-vendored";
@@ -437,14 +427,13 @@ import { ExifTool } from "exiftool-vendored";
 
 ### Benefits of Disposable Interfaces
 
-1. **Guaranteed Cleanup**: Resources are freed even if exceptions occur
-2. **Timeout Protection**: Automatic forceful cleanup if graceful shutdown hangs
-3. **Zero Boilerplate**: No manual `.end()` calls or complex try/finally blocks
-4. **Scope-Based**: Clear resource lifetime tied to lexical scope
-5. **Exception Safe**: Works correctly with async/await exception handling
+1. **Scope-Based**: The resource lifetime is tied to a lexical scope
+2. **Exception-Aware**: Disposal runs when an exception leaves the scope
+3. **Awaitable**: `await using` waits for asynchronous disposal
+4. **Less Boilerplate**: No manual cleanup `try`/`finally` block
 
 ### When to Use Each Approach
 
-- **`using`**: Simple synchronous cleanup, fire-and-forget scenarios
-- **`await using`**: Production code requiring graceful cleanup (recommended)
+- **`using`**: Initiates cleanup without waiting for completion
+- **`await using`**: Waits for graceful cleanup (recommended)
 - **Manual `.end()`**: Pre-TypeScript 5.2 environments or fine-grained control

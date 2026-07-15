@@ -880,8 +880,8 @@ export class ExifTool {
    * This allows ExifTool instances to be automatically cleaned up when they go out of scope.
    *
    * Note: This is a synchronous disposal method that initiates graceful cleanup but doesn't
-   * wait for completion. If graceful cleanup times out, forceful cleanup is attempted.
-   * For guaranteed cleanup completion, use `await using` with the async disposal method instead.
+   * wait for completion. If graceful cleanup times out, forceful cleanup is requested.
+   * Use `await using` when the caller must wait for the cleanup attempt to settle.
    *
    * @example
    * ```typescript
@@ -897,20 +897,20 @@ export class ExifTool {
       // Start with graceful cleanup, but use timeout for safety since this is sync disposal
       const cleanup = this.end(true);
 
-      // Set up a timeout to force process exit if graceful cleanup hangs
+      // Set up a timeout to request forceful cleanup if graceful cleanup hangs
       // This is necessary because synchronous disposal can't wait for async operations
       const timeoutMs = this.options.disposalTimeoutMs ?? 1000;
       const timeoutHandle = setTimeout(() => {
         const logger = this.options.logger();
         logger.error(
-          `ExifTool synchronous disposal timeout after ${timeoutMs}ms, forcing cleanup`,
+          `ExifTool synchronous disposal timeout after ${timeoutMs}ms, requesting forceful cleanup`,
         );
-        // Force immediate termination of child processes if they exist
+        // Request immediate termination of child processes if they still exist
         try {
           this.batchCluster.closeChildProcesses(false);
         } catch (err) {
           logger.error(
-            "Error during forced child process cleanup during sync disposal:",
+            "Error while requesting forceful child process cleanup during sync disposal:",
             err,
           );
         }
@@ -932,8 +932,9 @@ export class ExifTool {
    * Implements the AsyncDisposable interface for automatic async cleanup with the `await using` keyword.
    * This allows ExifTool instances to be automatically cleaned up when they go out of scope.
    *
-   * This method provides robust cleanup with timeout protection to prevent hanging.
-   * If graceful cleanup times out, forceful cleanup is attempted automatically.
+   * This method waits for graceful cleanup. If the configured timeout elapses,
+   * forceful cleanup is requested. Cleanup is best-effort and the timeout is not
+   * a hard completion deadline.
    *
    * @example
    * ```typescript
@@ -946,7 +947,8 @@ export class ExifTool {
    */
   async [Symbol.asyncDispose](): Promise<void> {
     if (!this.ended) {
-      // Set up a timeout to prevent hanging indefinitely during async disposal
+      // Set up a timeout before requesting forceful cleanup. This does not
+      // impose a hard deadline on the complete disposal operation.
       const timeoutMs = this.options.asyncDisposalTimeoutMs ?? 5000;
       let timeoutHandle: NodeJS.Timeout =
         undefined as unknown as NodeJS.Timeout;

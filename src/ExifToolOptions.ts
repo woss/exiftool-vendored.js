@@ -403,7 +403,8 @@ export interface ExifToolOptions
 
   /**
    * Timeout in milliseconds for synchronous disposal (using Symbol.dispose).
-   * If graceful cleanup takes longer than this, forceful cleanup is attempted.
+   * If graceful cleanup takes longer than this, forceful cleanup is requested.
+   * This is not a hard completion deadline.
    *
    * @default 1000 (1 second)
    */
@@ -411,7 +412,8 @@ export interface ExifToolOptions
 
   /**
    * Timeout in milliseconds for asynchronous disposal (using Symbol.asyncDispose).
-   * If graceful cleanup takes longer than this, forceful cleanup is attempted.
+   * If graceful cleanup takes longer than this, forceful cleanup is requested.
+   * This is not a hard completion deadline.
    *
    * @default 5000 (5 seconds)
    */

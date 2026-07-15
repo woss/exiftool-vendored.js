@@ -35,7 +35,7 @@ describe("ExifTool disposal", () => {
     expect(et.ended).to.be.true;
   });
 
-  it("should handle timeout in async disposal gracefully", async () => {
+  it("should request forceful cleanup after an async disposal timeout", async () => {
     const et = new ExifTool();
 
     // Mock a slow .end() method by stubbing it
@@ -51,12 +51,12 @@ describe("ExifTool disposal", () => {
         return originalEnd(false);
       } else {
         forcefulEndCalled = true;
-        // Forceful cleanup should work quickly
+        // Model a forceful cleanup request that settles quickly
         return originalEnd(false);
       }
     };
 
-    // The async dispose should timeout and attempt forceful cleanup
+    // The async disposer should request forceful cleanup after its timeout
     await et[Symbol.asyncDispose]();
 
     expect(endCalled).to.be.true;

@@ -35,7 +35,7 @@ vendored versions of ExifTool match the version that they vendor.
 
 ## History
 
-### v37.0.0 (unreleased)
+### v37.0.0
 
 - 💔 **BREAKING: malformed UTF-8 in ExifTool JSON output is now marked with
   Unicode replacement character U+FFFD (`�`) instead of ASCII question mark
@@ -87,6 +87,8 @@ vendored versions of ExifTool match the version that they vendor.
     filtering pipeline. A custom filter must perform its own UTF-8 repair and
     byte capture if those behaviors are desired; `invalidUtf8Bytes` will be
     absent.
+
+- 📦 Corrected resource-cleanup documentation to distinguish normal shutdown, non-blocking `using`, awaited `await using`, and best-effort disposal timeouts.
 
 ### v36.1.0
 
@@ -209,7 +211,7 @@ vendored versions of ExifTool match the version that they vendor.
 
   **Previously**, even though child processes were unreferenced, the stdio streams kept the parent Node.js process alive, requiring explicit `.end()` calls.
 
-  **Now**, stdio streams are unreferenced by default, so scripts can exit naturally without calling `.end()`. Child processes are cleaned up automatically when the parent exits.
+  **Now**, stdio streams are unreferenced by default, so scripts can exit naturally without calling `.end()`. During normal shutdown, child-process cleanup is attempted automatically. Exit cleanup was strengthened further in v35.2.0 and v35.10.1; abrupt termination such as `SIGKILL` cannot run cleanup handlers.
 
   To restore the previous behavior (parent process stays alive until `.end()` is called):
 
@@ -334,12 +336,12 @@ vendored versions of ExifTool match the version that they vendor.
 
 - ✨ Added **Disposable interface support** for automatic resource cleanup:
   - `ExifTool` now implements both `Disposable` and `AsyncDisposable` interfaces
-  - Use `using et = new ExifTool()` for automatic synchronous cleanup (TypeScript 5.2+)
-  - Use `await using et = new ExifTool()` for automatic asynchronous cleanup
+  - Use `using et = new ExifTool()` to initiate cleanup when a scope exits (TypeScript 5.2+)
+  - Use `await using et = new ExifTool()` to await asynchronous cleanup
   - Synchronous disposal initiates graceful cleanup with configurable timeout fallback
-  - Asynchronous disposal provides robust cleanup with timeout protection
+  - Asynchronous disposal requests forceful cleanup after its configured timeout; the timeout is not a hard completion deadline
   - New options: `disposalTimeoutMs` (default: 1000ms) and `asyncDisposalTimeoutMs` (default: 5000ms)
-  - Comprehensive error handling ensures disposal never throws or hangs
+  - Disposal errors are logged; asynchronous disposal may reject if cleanup fails
   - Maintains backward compatibility - existing `.end()` method unchanged
 
 - ✨ **Enhanced JSDoc annotations** for Tags interface with emoji-based visual hierarchy:

@@ -267,49 +267,67 @@ if (dt instanceof ExifDateTime) {
 
 ### Resource Cleanup
 
-As of v35, **Node.js will exit naturally** without calling `.end()` — child processes are cleaned up automatically when the parent exits.
+With the default settings, ExifTool workers no longer keep Node.js alive after
+awaited work finishes. During normal shutdown, the library attempts to clean up
+workers automatically. Abrupt termination, such as `SIGKILL` or an operating-
+system crash, cannot run cleanup handlers.
 
-For **long-running applications** (servers, daemons), calling `.end()` is still recommended for graceful shutdown:
+Call and await `.end()` when cleanup must finish before your application
+continues or exits. For servers and daemons, make this one part of the
+application's complete shutdown procedure:
 
 ```javascript
 import { exiftool } from "exiftool-vendored";
 
-// For servers/daemons: graceful shutdown on termination signals
-process.on("SIGINT", () => exiftool.end());
-process.on("SIGTERM", () => exiftool.end());
+async function shutdown(signal) {
+  try {
+    await closeApplicationResources(); // Server, sockets, database, etc.
+    await exiftool.end();
+  } finally {
+    // A signal listener disables Node's default termination behavior. Re-send
+    // the signal after cleanup so the process terminates normally.
+    process.kill(process.pid, signal);
+  }
+}
+
+process.once("SIGINT", (signal) => void shutdown(signal));
+process.once("SIGTERM", (signal) => void shutdown(signal));
 ```
 
 #### Automatic Cleanup with Disposable Interfaces
 
-For **TypeScript 5.2+** projects, consider using automatic resource management:
+For **TypeScript 5.2+** projects configured for explicit resource management,
+you can bind an instance's lifecycle to a scope:
 
 ```javascript
 import { ExifTool } from "exiftool-vendored";
 
-// Automatic synchronous cleanup
+// Starts cleanup when the scope exits, but does not wait for it
 {
   using et = new ExifTool();
   const tags = await et.read("photo.jpg");
-  // ExifTool automatically cleaned up when block exits
+  // ExifTool cleanup is initiated when the block exits
 }
 
-// Automatic asynchronous cleanup (recommended)
+// Waits for cleanup when the scope exits (recommended)
 {
   await using et = new ExifTool();
   const tags = await et.read("photo.jpg");
-  // ExifTool gracefully cleaned up when block exits
+  // ExifTool cleanup is awaited when the block exits
 }
 ```
 
 **Benefits:**
 
-- **Guaranteed cleanup**: No leaked processes, even with exceptions
-- **Timeout protection**: Automatic forceful cleanup if graceful shutdown hangs
-- **Zero boilerplate**: No manual `.end()` calls needed
+- **Scope-bound disposal**: Disposal runs on ordinary scope exit, including exceptions
+- **Awaited cleanup**: `await using` waits for asynchronous disposal
+- **Less boilerplate**: No manual `try`/`finally` cleanup block
 
 **Caution:**
 
-- **Operating-system startup lag**: Linux costs ~50-500ms to launch a new ExifTool process, but macOS can take several seconds (presumably due to Gatekeeper), and **Windows can take tens of seconds** due to antivirus shenanigans. Don't dispose your instance unless you're **really** done with it!
+- **Operating-system startup lag**: Startup time varies widely with the OS,
+  hardware, and security software, and can take several seconds on some
+  systems. Don't dispose an instance until you're really done with it.
 
 ### Tag Completeness
 

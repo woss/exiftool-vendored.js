@@ -2,6 +2,7 @@ import { BinaryField } from "./BinaryField";
 import { ExifDate } from "./ExifDate";
 import { ExifDateTime } from "./ExifDateTime";
 import { ExifTime } from "./ExifTime";
+import { reviveInvalidUtf8Bytes } from "./InvalidUtf8Bytes";
 
 export type Json = Literal | { [key: string]: Json } | Json[];
 export type Literal = string | number | boolean | bigint | null;
@@ -33,9 +34,10 @@ const Revivers: Record<string, (value: JsonObject) => unknown> = {
  * - {@link ExifDateTime} is revived using {@link ExifDateTime.fromJSON}
  * - {@link ExifDate} is revived using {@link ExifDate.fromJSON}
  * - {@link ExifTime} is revived using {@link ExifTime.fromJSON}
+ * - `invalidUtf8Bytes` sidecars are revived as nested `Uint8Array` values
  */
 export function parseJSON(s: string) {
-  return JSON.parse(s, (_key, value: Json) => {
+  return JSON.parse(s, (key, value: Json) => {
     if (
       typeof value === "object" &&
       value !== null &&
@@ -43,6 +45,9 @@ export function parseJSON(s: string) {
       typeof value._ctor === "string"
     ) {
       return Revivers[value._ctor]?.(value as JsonObject) ?? value;
+    }
+    if (key === "invalidUtf8Bytes") {
+      return reviveInvalidUtf8Bytes(value);
     }
     return value;
   });

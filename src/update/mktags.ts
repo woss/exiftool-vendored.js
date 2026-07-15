@@ -46,6 +46,7 @@ const StaticInterfaceMetadata = [
     name: "ExifToolVendoredTags",
     group: "Library", // Library-added tags
     tagNames: ExifToolVendoredTagNames,
+    tagTypes: { invalidUtf8Bytes: "InvalidUtf8Bytes" },
   },
   {
     name: "GeolocationTags",
@@ -1077,6 +1078,15 @@ function exampleToS(examples: any[]): string {
   return examples.length > 1 ? toStr(examples) : toStr(examples[0]);
 }
 
+/**
+ * The Unicode replacement character U+FFFD (`�`) is inserted by ExifTool when it
+ * repairs malformed UTF-8. Such values are corrupt garbage rather than
+ * representative samples, so we skip them when picking an `@example`.
+ */
+function hasReplacementChar(value: unknown): boolean {
+  return value != null && JSON.stringify(value).includes("�");
+}
+
 function getOrSet<K, V>(m: Map<K, V>, k: K, valueThunk: () => V): V {
   const prior = m.get(k);
   if (prior != null) {
@@ -1101,6 +1111,7 @@ class Tag {
   important = false;
   groups = new Set<string>();
   staticInterface?: string; // If set, this tag is from a static interface and shouldn't be generated
+  valueTypeOverride?: string;
   doc?: string; // Optional documentation/remarks for this tag
   see?: string; // Optional @see reference (URL or other reference)
   constructor(readonly tag: string) {
@@ -1148,6 +1159,7 @@ class Tag {
 
   get valueType(): string {
     return (
+      this.valueTypeOverride ??
       RequiredTags[this.base as any]?.t ??
       (this.valueTypes.length === 0 ? "string" : this.valueTypes.join(" | "))
     );
@@ -1330,6 +1342,8 @@ class Tag {
     // Shove boring values to the end:
     this.vacuumValues();
     uniq(this.values)
+      // Skip values ExifTool mangled while repairing malformed UTF-8:
+      .filter((ea) => !hasReplacementChar(ea))
       .sort()
       .reverse()
       .forEach((ea) => {
@@ -1394,6 +1408,12 @@ class TagMap {
       for (const tagName of entry.tagNames.values) {
         const t = this.tag(entry.group + ":" + tagName);
         t.staticInterface = entry.name;
+        if ("tagTypes" in entry) {
+          const typeOverride = (entry.tagTypes as Record<string, string>)[
+            tagName
+          ];
+          if (typeOverride != null) t.valueTypeOverride = typeOverride;
+        }
         t.important = true; // Include in metadata even at 0 frequency
       }
     }

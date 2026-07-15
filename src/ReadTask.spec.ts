@@ -18,6 +18,7 @@ import { hms } from "./DateTime";
 import { ExifDateTime } from "./ExifDateTime";
 import { defaultVideosToUTC, ExifTime, ExifTool } from "./ExifTool";
 import { GeolocationTagNames, GeolocationTags } from "./GeolocationTags";
+import { InvalidUtf8Marker } from "./InvalidUtf8Bytes";
 import { omit } from "./Object";
 import { pick } from "./Pick";
 import { ReadTask, ReadTaskOptions } from "./ReadTask";
@@ -56,6 +57,67 @@ describe("ReadTask", () => {
   let exiftool: ExifTool;
   before(() => (exiftool = new ExifTool()));
   after(() => end(exiftool));
+
+  describe("malformed UTF-8", () => {
+    const malformedUtf8File = join(testDir, "malformed-utf8.jpg");
+    const customFilter = 'Filter=Image::ExifTool::XMP::FixUTF8(\\$_,"X")';
+
+    it("marks malformed scalar and list values without changing valid text", async () => {
+      const tags = await exiftool.read(malformedUtf8File);
+      expect(tags).to.containSubset({
+        City: "\uFFFDK",
+        Title: "Authored? 世界",
+        Subject: ["Valid? item", "damaged:\uFFFDtail"],
+      });
+      expect(tags.invalidUtf8Bytes?.City).to.deep.equal(
+        new Uint8Array([0xdc, 0x4b]),
+      );
+      expect(tags.invalidUtf8Bytes?.Subject).to.deep.equal({
+        1: new Uint8Array([
+          0x64, 0x61, 0x6d, 0x61, 0x67, 0x65, 0x64, 0x3a, 0xdc, 0x74, 0x61,
+          0x69, 0x6c,
+        ]),
+      });
+    });
+
+    it("keeps the marker when per-call readArgs replace the defaults", async () => {
+      expect(
+        await exiftool.read(malformedUtf8File, { readArgs: [] }),
+      ).to.containSubset({
+        City: "\uFFFDK",
+        Subject: ["Valid? item", "damaged:\uFFFDtail"],
+      });
+    });
+
+    it("leaves UTF-8 repair to an explicit custom Filter", async () => {
+      const tags = await exiftool.read(malformedUtf8File, {
+        readArgs: ["-api", customFilter],
+      });
+      expect(tags).to.containSubset({
+        City: "XK",
+        Subject: ["Valid? item", "damaged:Xtail"],
+      });
+      expect(tags.invalidUtf8Bytes).to.equal(undefined);
+    });
+
+    it("prunes byte paths whose parsed tags are rejected", () => {
+      const tags = parse({
+        tags: {
+          GPSLatitude: 999,
+          GPSLongitude: 1,
+          GPSProcessingMethod: {
+            [InvalidUtf8Marker]: {
+              replacement: "s:�GPS",
+              rawBase64: "b64:3EdQUw==",
+            },
+          },
+        },
+      });
+
+      expect(tags.GPSProcessingMethod).to.equal(undefined);
+      expect(tags.invalidUtf8Bytes).to.equal(undefined);
+    });
+  });
 
   describe("Lat/Lon parsing", () => {
     /* Example:

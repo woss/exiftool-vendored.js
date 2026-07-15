@@ -1,5 +1,11 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { expect } from "./_chai.spec";
 import { TagNames } from "./Tags";
+
+const TagMetadata = JSON.parse(
+  readFileSync(path.join(__dirname, "../data/TagMetadata.json"), "utf8"),
+) as Record<string, { type: string }>;
 
 describe("TagNames", () => {
   it("should include all expected common tags", () => {
@@ -62,6 +68,8 @@ describe("TagNames", () => {
     expect(TagNames.includes("zoneSource")).to.be.true;
     expect(TagNames.includes("errors")).to.be.true;
     expect(TagNames.includes("warnings")).to.be.true;
+    expect(TagNames.includes("invalidUtf8Bytes")).to.be.true;
+    expect(TagMetadata.invalidUtf8Bytes?.type).to.equal("InvalidUtf8Bytes");
   });
 
   it("should include geolocation tags when available", () => {

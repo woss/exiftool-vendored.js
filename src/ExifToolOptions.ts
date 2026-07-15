@@ -328,6 +328,17 @@ export interface ExifToolOptions
    * library rejects any entry containing `\r`, `\n`, or `\0` as a
    * defense-in-depth measure, but provides no other sanitization.
    *
+   * JSON reads repair malformed UTF-8 with U+FFFD (`�`) independently of this
+   * array and preserve the original string bytes in
+   * `Tags.invalidUtf8Bytes`. If these arguments contain an explicit,
+   * non-empty ExifTool `-api Filter=...` option, that custom filter owns the
+   * complete output filtering pipeline and must perform any desired UTF-8
+   * repair and byte capture itself.
+   *
+   * The marker appears only in string values; to render it as the pre-v37 `?`,
+   * post-process with
+   * `typeof value === "string" ? value.replace(/\uFFFD/g, "?") : value`.
+   *
    * @default `["-fast"]`
    */
   readArgs: string[];

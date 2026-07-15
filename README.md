@@ -1,4 +1,4 @@
-# exiftool-vendored
+# 📸 exiftool-vendored
 
 **Fast, cross-platform [Node.js](https://nodejs.org/) access to [ExifTool](https://exiftool.org/). Built and supported by [PhotoStructure](https://photostructure.com).**
 
@@ -6,7 +6,7 @@
 [![Node.js CI](https://github.com/photostructure/exiftool-vendored.js/actions/workflows/build.yml/badge.svg)](https://github.com/photostructure/exiftool-vendored.js/actions/workflows/build.yml)
 [![GitHub issues](https://img.shields.io/github/issues/photostructure/exiftool-vendored.js.svg)](https://github.com/photostructure/exiftool-vendored.js/issues)
 
-## Installation & Quick Start
+## 🚀 Installation & Quick Start
 
 **Requirements**: Node.js Active LTS or Maintenance LTS versions only
 
@@ -35,7 +35,7 @@ await exiftool.extractThumbnail("photo.jpg", "thumb.jpg");
 await exiftool.end();
 ```
 
-## Why exiftool-vendored?
+## 🤔 Why exiftool-vendored?
 
 ### ⚡ **Performance**
 
@@ -53,7 +53,7 @@ Order of magnitude faster than other Node.js ExifTool modules. Powers [PhotoStru
 - **Smart dates**: Timezone-aware `ExifDateTime` classes
 - **Auto-generated tags**: Based on 10,000+ real camera samples
 
-## Core Features
+## ✨ Core Features
 
 ### Reading Metadata
 
@@ -113,7 +113,7 @@ await exiftool.extractPreview("photo.jpg", "preview.jpg");
 await exiftool.extractJpgFromRaw("photo.cr2", "processed.jpg");
 ```
 
-## Understanding Tags
+## 🏷️ Understanding Tags
 
 The `Tags` interface contains **thousands of metadata fields** from an auto-generated TypeScript file. Each tag has JSDoc annotations:
 
@@ -139,17 +139,86 @@ LensSpec?: string;
 - **@groups** = Metadata categories (EXIF, GPS, IPTC, XMP, etc.)
 - **@example** = Representative values
 
-### Code defensively!
+## 🛡️ Code defensively!
 
-- No fields are guaranteed to be present.
-- Value types are not guaranteed -- assume strings may get in your numeric fields, and handle it gracefully.
-- There may very well be keys returned that are **not** in the `Tags` interface.
+The generated `Tags` interface is a deliberately bounded, best-effort model of
+what ExifTool extracts.
+
+### Declared fields may be missing
+
+Formats, cameras, and editing software write different subsets of metadata,
+and later tools may strip fields. Treat every property as optional, even when
+it is common for the files you currently handle.
+
+### Undeclared fields may be included
+
+The interface favors the most common and useful fields. Without tag pruning,
+TypeScript fails with `TS2590: Expression produces a union type that is too
+complex to represent`.
+
+Rare, vendor-specific, and custom tags may still appear at runtime. If your app
+needs arbitrary tags, intersect `Tags` with `Record<string, unknown>`; if a tag
+would be useful to others, please open a PR to add it to the generated
+interface.
+
+### Value types may vary
+
+ExifTool may return unexpected representations for malformed, ambiguous, or
+format-specific values. Validate values at runtime and handle strings in
+nominally numeric fields gracefully.
 
 📖 **[Complete Tags Documentation →](docs/TAGS.md)**
 
-## Important Notes
+## 🪤 Parsing gotchas
 
-### ⚙️ Configuration
+### Timezones may be inferred
+
+Media metadata often omits its timezone, so this library uses several heuristics
+to infer one. See [Dates & Timezones](#timezones) for the inference order and
+configuration options.
+
+### Malformed UTF-8 is marked and preserved
+
+Malformed UTF-8 bytes are marked with the Unicode replacement character
+U+FFFD, not ASCII `?`, so byte corruption stays distinguishable from
+authored punctuation. The original bytes are preserved without another file
+read in the sparse `invalidUtf8Bytes` sidecar:
+
+```ts
+const tags = await exiftool.read(file);
+tags.ImageDescription; // "Arch Enemy\rG�teborg, 19.07.2007"
+
+const bytes = tags.invalidUtf8Bytes?.ImageDescription;
+if (bytes instanceof Uint8Array) {
+  // Camera/tag-specific evidence identifies this Kodak value as MacRoman:
+  const recovered = new TextDecoder("macintosh").decode(bytes);
+  recovered; // "Arch Enemy\rGöteborg, 19.07.2007"
+}
+```
+
+The `macintosh` charset is justified by evidence for this specific Kodak
+value; it is not a default for every damaged field.
+
+Nested metadata mirrors the representation selected by ExifTool's `struct`
+option. Extracted XML element text, attribute values, CDATA, and parsed
+embedded XML values are captured at their returned paths. These are the
+bytes of ExifTool's extracted value after XML parsing, not the original XML
+token: entity spellings and CDATA delimiters are not retained. Value filters
+never receive XML element or attribute _names_, and ExifTool's JSON output
+repairs or canonicalizes malformed names before the library sees them, so
+their exact bytes cannot be exposed by this sidecar.
+
+The library deliberately does not guess a legacy charset: files assembled
+over many years may contain several encodings, and readable alternatives are
+not necessarily correct. Consumers can decode only the sidecar entries using
+their own camera/tag/user context. An explicit custom ExifTool `Filter`
+disables both built-in repair and byte capture. To restore the pre-v37
+display, guard on the value type first:
+`typeof value === "string" ? value.replace(/\uFFFD/g, "?") : value`.
+
+## ⚠️ Important Notes
+
+### Configuration
 
 exiftool-vendored provides two levels of configuration:
 
@@ -176,7 +245,9 @@ const exiftool = new ExifTool({
 
 📖 **[Complete Configuration Guide →](docs/CONFIGURATION.md)**
 
-### ⏰ Dates & Timezones
+<a id="timezones"></a>
+
+### Dates & Timezones
 
 Images rarely specify timezones. This library infers them using several heuristics:
 
@@ -194,7 +265,7 @@ if (dt instanceof ExifDateTime) {
 
 📖 **[Date & Timezone Guide →](docs/DATES.md)**
 
-### 🧹 Resource Cleanup
+### Resource Cleanup
 
 As of v35, **Node.js will exit naturally** without calling `.end()` — child processes are cleaned up automatically when the parent exits.
 
@@ -240,7 +311,7 @@ import { ExifTool } from "exiftool-vendored";
 
 - **Operating-system startup lag**: Linux costs ~50-500ms to launch a new ExifTool process, but macOS can take several seconds (presumably due to Gatekeeper), and **Windows can take tens of seconds** due to antivirus shenanigans. Don't dispose your instance unless you're **really** done with it!
 
-### 🏷️ Tag Completeness
+### Tag Completeness
 
 The `Tags` interface shows the most common fields, but ExifTool can extract many more. Cast to access unlisted fields:
 
@@ -249,9 +320,9 @@ const tags = await exiftool.read("photo.jpg");
 const customField = (tags as any).UncommonTag;
 ```
 
-## Documentation
+## 📚 Documentation
 
-### 📚 **Guides**
+### **Guides**
 
 - **[Installation Guide](docs/INSTALLATION.md)** - Electron, Docker, platform setup
 - **[Usage Examples](docs/USAGE-EXAMPLES.md)** - Comprehensive API examples
@@ -259,16 +330,16 @@ const customField = (tags as any).UncommonTag;
 - **[Tags Reference](docs/TAGS.md)** - Understanding the 2,500+ metadata fields
 - **[Electron Integration](docs/ELECTRON.md)** - Electron-specific setup
 
-### 🔧 **Troubleshooting**
+### **Troubleshooting**
 
 - **[Debugging Guide](docs/DEBUGGING.md)** - Debug logging and common issues
 - **[Temporal Migration](docs/TEMPORAL-MIGRATION.md)** - Future JavaScript Temporal API
 
-### 📖 **API Reference**
+### **API Reference**
 
 - **[TypeDoc Documentation](https://photostructure.github.io/exiftool-vendored.js/)** - Complete API reference
 
-## Performance
+## ⚡ Performance
 
 The default singleton is throttled for stability. For high-throughput processing:
 
@@ -289,13 +360,13 @@ await exiftool.end();
 
 **Benchmarks**: 20+ files/second/thread, 500+ files/second using all CPU cores.
 
-## Support & Community
+## 🤝 Support & Community
 
 - **📋 Issues**: [GitHub Issues](https://github.com/photostructure/exiftool-vendored.js/issues)
 - **📖 Changelog**: [CHANGELOG.md](CHANGELOG.md)
 - **🔒 Security**: [SECURITY.md](SECURITY.md)
 - **📄 License**: [MIT](LICENSE)
 
-### Contributors 🎉
+### Contributors
 
 [Matthew McEachen](https://github.com/mceachen), [Joshua Harris](https://github.com/Circuit8), [Anton Mokrushin](https://github.com/amokrushin), [Luca Ban](https://github.com/mesqueeb), [Demiurga](https://github.com/apolkingg8), [David Randler](https://github.com/draity)

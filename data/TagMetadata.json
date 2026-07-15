@@ -7394,7 +7394,7 @@
   "FirmwareVersion": {
     "frequency": 0.07,
     "mainstream": true,
-    "groups": ["APP", "MakerNotes", "QuickTime"],
+    "groups": ["APP", "MakerNotes", "QuickTime", "RAF"],
     "type": "string",
     "typed": true
   },
@@ -11899,7 +11899,7 @@
   "Location": {
     "frequency": 0.02,
     "mainstream": true,
-    "groups": ["MakerNotes"],
+    "groups": ["Composite", "MakerNotes", "XMP"],
     "type": "string",
     "typed": true
   },
@@ -19753,7 +19753,7 @@
   },
   "Transform": {
     "frequency": 0.01,
-    "mainstream": false,
+    "mainstream": true,
     "groups": ["MakerNotes"],
     "type": "string",
     "typed": true
@@ -21004,6 +21004,13 @@
     "mainstream": true,
     "groups": ["Library"],
     "type": "string",
+    "typed": true
+  },
+  "invalidUtf8Bytes": {
+    "frequency": 0,
+    "mainstream": true,
+    "groups": ["Library"],
+    "type": "InvalidUtf8Bytes",
     "typed": true
   },
   "tz": {

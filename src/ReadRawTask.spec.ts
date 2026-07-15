@@ -1,6 +1,7 @@
 import { copyFile } from "node:fs/promises";
 import path from "node:path";
 import { exiftool } from "./ExifTool";
+import { InvalidUtf8Marker } from "./InvalidUtf8Bytes";
 import {
   NonAlphaStrings,
   UnicodeTestMessage,
@@ -14,6 +15,240 @@ import {
 after(() => end(exiftool));
 
 describe("ReadRawTask", () => {
+  describe("malformed UTF-8", () => {
+    const malformedUtf8File = path.join(testDir, "malformed-utf8.jpg");
+    const binaryListFile = path.join(testDir, "malformed-utf8.lfp");
+    const binaryCollisionFile = path.join(
+      testDir,
+      "malformed-utf8-collision.mie",
+    );
+    const customFilter = 'Image::ExifTool::XMP::FixUTF8(\\$_,"X")';
+
+    function withoutInvalidUtf8Bytes<T extends { invalidUtf8Bytes?: unknown }>(
+      value: T,
+    ) {
+      const { invalidUtf8Bytes: _, ...rest } = value;
+      return rest;
+    }
+
+    function legacyUtf8Replacement(value: unknown): unknown {
+      if (typeof value === "string") return value.replaceAll("\uFFFD", "?");
+      if (Array.isArray(value)) return value.map(legacyUtf8Replacement);
+      if (value != null && typeof value === "object") {
+        return Object.fromEntries(
+          Object.entries(value).map(([key, child]) => [
+            key,
+            legacyUtf8Replacement(child),
+          ]),
+        );
+      }
+      return value;
+    }
+
+    it("marks malformed scalar and list values without changing valid text", async () => {
+      const tags = await exiftool.readRaw(malformedUtf8File);
+      expect(tags).to.containSubset({
+        City: "\uFFFDK",
+        Title: "Authored? 世界",
+        Subject: ["Valid? item", "damaged:\uFFFDtail"],
+        UserComment: "SKEYս",
+      });
+      expect(tags.invalidUtf8Bytes?.City).to.deep.equal(
+        new Uint8Array([0xdc, 0x4b]),
+      );
+      expect(tags.invalidUtf8Bytes?.Subject).to.deep.equal({
+        1: new Uint8Array([
+          0x64, 0x61, 0x6d, 0x61, 0x67, 0x65, 0x64, 0x3a, 0xdc, 0x74, 0x61,
+          0x69, 0x6c,
+        ]),
+      });
+      expect(tags.invalidUtf8Bytes?.UserComment).to.deep.equal(
+        new Uint8Array([
+          0x53, 0x4b, 0x45, 0x59, 0x00, 0x00, 0x00, 0x00, 0xd5, 0x00, 0xbd,
+        ]),
+      );
+    });
+
+    it("mirrors JSON NUL removal before deciding which bytes are malformed", async () => {
+      const readArgs = ["-G1", "-UserComment"];
+      const marked = await exiftool.readRaw(malformedUtf8File, { readArgs });
+      const legacy = await exiftool.readRaw(malformedUtf8File, {
+        readArgs: [...readArgs, "-api", "Filter=1"],
+      });
+
+      // The stored bytes d5 00 bd become valid UTF-8 (U+057D) when JSON removes
+      // NUL. Repairing before that deletion would incorrectly produce two U+FFFDs.
+      expect(marked).to.containSubset({ "ExifIFD:UserComment": "SKEYս" });
+      expect(marked.invalidUtf8Bytes).to.deep.equal({
+        "ExifIFD:UserComment": new Uint8Array([
+          0x53, 0x4b, 0x45, 0x59, 0x00, 0x00, 0x00, 0x00, 0xd5, 0x00, 0xbd,
+        ]),
+      });
+      expect(withoutInvalidUtf8Bytes(marked)).to.deep.equal(legacy);
+    });
+
+    it("otherwise differs from legacy JSON only by ? to U+FFFD repair", async () => {
+      for (const [file, readArgs] of [
+        [malformedUtf8File, ["-City", "-Title", "-Subject", "-UserComment"]],
+        [binaryListFile, ["-G1", "-JSONMetadata", "-Foo"]],
+        [binaryCollisionFile, ["-G1", "-City", "-RelatedAudioFile"]],
+      ] as const) {
+        const marked = await exiftool.readRaw(file, {
+          readArgs: [...readArgs],
+        });
+        const legacy = await exiftool.readRaw(file, {
+          readArgs: [...readArgs, "-api", "Filter=1"],
+        });
+        expect(
+          legacyUtf8Replacement(withoutInvalidUtf8Bytes(marked)),
+        ).to.deep.equal(legacy);
+      }
+    });
+
+    it("keeps the marker when per-call readArgs replace the defaults", async () => {
+      expect(
+        await exiftool.readRaw(malformedUtf8File, { readArgs: [] }),
+      ).to.containSubset({
+        City: "\uFFFDK",
+        Subject: ["Valid? item", "damaged:\uFFFDtail"],
+      });
+    });
+
+    for (const { api, filter } of [
+      { api: "-api", filter: `Filter=${customFilter}` },
+      { api: "-API", filter: `filter=${customFilter}` },
+      { api: "-api", filter: `FILTER^=${customFilter}` },
+    ]) {
+      it(`leaves UTF-8 repair to ${api} ${filter.split("=")[0]}=`, async () => {
+        const tags = await exiftool.readRaw(malformedUtf8File, {
+          readArgs: [api, filter],
+        });
+        expect(tags).to.containSubset({
+          City: "XK",
+          Subject: ["Valid? item", "damaged:Xtail"],
+        });
+        expect(tags.invalidUtf8Bytes).to.equal(undefined);
+      });
+    }
+
+    for (const bareFilter of ["Filter", "Filter^"]) {
+      it(`treats a bare ${bareFilter} as a custom no-op Filter`, async () => {
+        // Ground truth:
+        // exiftool -j -City -api 'Filter[^]' test/malformed-utf8.jpg
+        const tags = await exiftool.readRaw(malformedUtf8File, {
+          readArgs: ["-City", "-api", bareFilter],
+        });
+        expect(tags.City).to.equal("?K");
+        expect(tags.invalidUtf8Bytes).to.equal(undefined);
+      });
+    }
+
+    it("does not decode marker-shaped output owned by a custom Filter", async () => {
+      const markerValue = {
+        [InvalidUtf8Marker]: {
+          replacement: "s:forged",
+          rawBase64: "b64:3Es=",
+        },
+      };
+      const markerFilter = String.raw`Filter=$_={"${InvalidUtf8Marker}"=>{replacement=>"s:forged",rawBase64=>"b64:3Es="}} if $_ eq "\xdcK"`;
+      const tags = await exiftool.readRaw(malformedUtf8File, {
+        readArgs: ["-City", "-api", markerFilter],
+      });
+
+      expect(tags.City).to.deep.equal(markerValue);
+      expect(tags.invalidUtf8Bytes).to.equal(undefined);
+    });
+
+    it("does not let a custom Filter leak into the next stay-open command", async () => {
+      expect(
+        await exiftool.readRaw(malformedUtf8File, {
+          readArgs: ["-api", `Filter=${customFilter}`],
+        }),
+      ).to.containSubset({ City: "XK" });
+
+      expect(
+        await exiftool.readRaw(malformedUtf8File, { readArgs: [] }),
+      ).to.containSubset({ City: "\uFFFDK" });
+    });
+
+    for (const emptyFilter of ["Filter=", "Filter^="]) {
+      it(`does not treat ${emptyFilter} as a custom Filter`, async () => {
+        expect(
+          await exiftool.readRaw(malformedUtf8File, {
+            readArgs: ["-api", emptyFilter],
+          }),
+        ).to.containSubset({ City: "\uFFFDK" });
+      });
+    }
+
+    for (const clearedFilter of ["Filter=", "Filter^="]) {
+      it(`honors a final ${clearedFilter} after a custom Filter`, async () => {
+        // ExifTool API options are last-assignment-wins. Verified with:
+        // exiftool -j -api 'Filter=..."X"' -api 'Filter=' malformed-utf8.jpg
+        expect(
+          await exiftool.readRaw(malformedUtf8File, {
+            readArgs: ["-api", `Filter=${customFilter}`, "-api", clearedFilter],
+          }),
+        ).to.containSubset({ City: "\uFFFDK" });
+      });
+    }
+
+    it("honors a final custom Filter after an empty Filter", async () => {
+      expect(
+        await exiftool.readRaw(malformedUtf8File, {
+          readArgs: ["-api", "Filter=", "-api", `Filter=${customFilter}`],
+        }),
+      ).to.containSubset({ City: "XK" });
+    });
+
+    it("does not alter malformed binary list items", async () => {
+      // The synthetic LFP contains two 13-byte JSONMetadata binary items.
+      // Ground truth without a Filter:
+      // exiftool -j -G1 -struct test/malformed-utf8.lfp
+      const tags = await exiftool.readRaw(binaryListFile, {
+        readArgs: ["-G1", "-JSONMetadata", "-Foo"],
+      });
+      expect(tags).to.containSubset({
+        "Lytro:JSONMetadata": [
+          "(Binary data 13 bytes, use -b option to extract)",
+          "(Binary data 13 bytes, use -b option to extract)",
+        ],
+        "Lytro:Foo": "\uFFFDL",
+      });
+      expect(tags.invalidUtf8Bytes).to.deep.equal({
+        "Lytro:Foo": new Uint8Array([0xdd, 0x4c]),
+      });
+    });
+
+    it("repairs text that has the same bytes as an unrelated binary tag", async () => {
+      // Both tags contain dc 4b. Ground truth:
+      // exiftool -b -MIE-Geo:City malformed-utf8-collision.mie | od -An -tx1
+      // exiftool -b -MIE-Audio:RelatedAudioFile ... | od -An -tx1
+      const tags = await exiftool.readRaw(binaryCollisionFile, {
+        readArgs: ["-G1", "-City", "-RelatedAudioFile"],
+      });
+      expect(tags).to.containSubset({
+        "MIE-Geo:City": "\uFFFDK",
+        "MIE-Audio:RelatedAudioFile":
+          "(Binary data 2 bytes, use -b option to extract)",
+      });
+      expect(tags.invalidUtf8Bytes).to.deep.equal({
+        "MIE-Geo:City": new Uint8Array([0xdc, 0x4b]),
+      });
+    });
+
+    it("preserves malformed binary output", async () => {
+      const tags = await exiftool.readRaw(binaryCollisionFile, {
+        readArgs: ["-G1", "-b", "-RelatedAudioFile"],
+      });
+      expect(tags).to.containSubset({
+        // base64 for the original bytes dc 4b
+        "MIE-Audio:RelatedAudioFile": "base64:3Es=",
+      });
+      expect(tags.invalidUtf8Bytes).to.equal(undefined);
+    });
+  });
+
   describe("non-alphanumeric filenames", () => {
     for (const { str, desc } of NonAlphaStrings) {
       it("reads with " + desc, async () => {

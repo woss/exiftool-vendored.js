@@ -117,6 +117,7 @@ export type {
   IPTCApplicationRecordTags,
 } from "./IPTCApplicationRecordTags";
 export type { ImageDataHashTag } from "./ImageDataHashTag";
+export type { InvalidUtf8Bytes } from "./InvalidUtf8Bytes";
 export type { Json, Literal } from "./JSON";
 export type {
   CollectionInfo,
@@ -353,7 +354,9 @@ export class ExifTool {
    * use `readRaw`.** Note that the default is `["-fast"]`, so if you want
    * ExifTool to read the entire file for metadata, you should pass an empty
    * array as the second parameter. See https://exiftool.org/#performance for
-   * more information about `-fast` and `-fast2`.
+   * more information about `-fast` and `-fast2`. The wrapper still adds its
+   * malformed UTF-8 repair/byte-capture filter unless these arguments provide
+   * a custom ExifTool `Filter`, in which case that filter owns both behaviors.
    *
    * @param options overrides to the default ExifTool options provided to the
    * ExifTool constructor.
@@ -399,9 +402,12 @@ export class ExifTool {
    * worse if you don't include `-fast` or `-fast2` (as the most expensive bits
    * are the perl interpreter and scanning the file on disk).
    *
-   * @param options any additional arguments other than the file path. Note that
-   * "-json", and the Windows unicode filename handler flags, "-charset
-   * filename=utf8", will be added automatically.
+   * @param options read options, including any additional `readArgs` other than
+   * the file path. `-json`, the Windows Unicode filename handler flags,
+   * `-charset filename=utf8`, malformed UTF-8 repair with U+FFFD, and original
+   * malformed-string byte capture in `invalidUtf8Bytes` are added
+   * automatically. An explicit custom ExifTool `Filter` in `readArgs` replaces
+   * the wrapper's filter and owns both repair and byte capture.
    *
    * @return Note that the return value will be similar to `Tags`, but with no
    * date, time, or other rich type parsing that you get from `.read()`. The

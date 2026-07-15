@@ -35,6 +35,59 @@ vendored versions of ExifTool match the version that they vendor.
 
 ## History
 
+### v37.0.0 (unreleased)
+
+- 💔 **BREAKING: malformed UTF-8 in ExifTool JSON output is now marked with
+  Unicode replacement character U+FFFD (`�`) instead of ASCII question mark
+  (`?`).** For example, malformed bytes `dc 4b` previously surfaced as `?K`
+  and now surface as `�K`. This applies to both `read()` and `readRaw()`,
+  including scalar and list values and calls that override `readArgs`. Valid
+  Unicode and authored question marks are unchanged.
+  - The original malformed string bytes are available without rereading the
+    media through an optional sparse `invalidUtf8Bytes` sidecar. It mirrors tag
+    paths, uses numeric object keys for damaged list items, stores each leaf as
+    a `Uint8Array`, and is absent when no malformed strings were found:
+
+    ```js
+    const tags = await exiftool.read(file);
+    tags.City; // "�K"
+    tags.invalidUtf8Bytes?.City; // Uint8Array([0xdc, 0x4b])
+    ```
+
+    `exiftool-vendored` does not guess a legacy charset. Consumers may decode
+    only these captured bytes using camera, tag, locale, or user-specific
+    evidence while retaining the U+FFFD value as a deterministic fallback.
+
+  - Nested structures mirror the paths ExifTool returns for the selected
+    `struct` mode. XML element text, attribute values, CDATA, opaque XML string
+    values, and leaves parsed from embedded binary XML packets are supported.
+    The captured bytes are the extracted value after XML parsing, not the
+    original XML token. Malformed XML element and attribute names are outside
+    this mechanism: value filters never receive names, and ExifTool's JSON
+    output repairs or canonicalizes them before the library sees them.
+
+  - The change affects new metadata reads only. Upgrading does not rewrite
+    values that applications have already persisted. Applications that use
+    extracted metadata as identifiers, facets, or tags may want to rescan or
+    reindex existing files.
+  - Consumers may replace ambiguous `?` corruption heuristics with explicit
+    U+FFFD checks where their data flow preserves the marker. Whether to
+    reject, display, or retain a marked value remains application policy.
+  - To restore the previous rendering, replace the marker in the string values
+    you consume (it never appears in numbers, dates, or binary fields). This is
+    a one-way transform — the reverse is impossible once malformed bytes have
+    collapsed to `?`, which is why the marker is preserved by default:
+
+    ```js
+    typeof value === "string" ? value.replace(/\uFFFD/g, "?") : value;
+    ```
+
+  - Advanced callers that provide their own non-empty ExifTool
+    `-api Filter=...` through `readArgs` retain ownership of the complete
+    filtering pipeline. A custom filter must perform its own UTF-8 repair and
+    byte capture if those behaviors are desired; `invalidUtf8Bytes` will be
+    absent.
+
 ### v36.1.0
 
 - ✨ Added `ExifTool.editTags()` for validated exact list-value additions/removals, MWG Collection additions/predicate removals, and audited scalar or flattened person-name removals without replacing unrelated metadata. See the [usage examples](docs/USAGE-EXAMPLES.md#editing-individual-tag-values).

@@ -17,6 +17,7 @@ import { ExifToolTask } from "./ExifToolTask";
 import { compareFilePaths } from "./File";
 import { Utf8FilenameCharsetArgs } from "./FilenameCharsetArgs";
 import { GpsLocationTags, parseGPSLocation } from "./GPS";
+import { InvalidUtf8Bytes, unwrapInvalidUtf8Tags } from "./InvalidUtf8Bytes";
 import { lazy } from "./Lazy";
 import { Maybe } from "./Maybe";
 import { isNumber } from "./Number";
@@ -34,6 +35,7 @@ import {
   normalizeZone,
   TzSrc,
 } from "./Timezones";
+import { hasBuiltInUtf8Filter, utf8JsonFilterArgs } from "./Utf8JsonFilter";
 
 /**
  * tag names we don't need to muck with, but name conventions (like including
@@ -86,6 +88,8 @@ export class ReadTask extends ExifToolTask<Tags> {
   private readonly degroup: boolean;
   #raw: Record<string, unknown> = {};
   #rawDegrouped: Record<string, unknown> = {};
+  #invalidUtf8Bytes: InvalidUtf8Bytes | undefined;
+  readonly #unwrapInvalidUtf8: boolean;
   readonly #tags: Tags = {};
 
   /**
@@ -100,6 +104,7 @@ export class ReadTask extends ExifToolTask<Tags> {
     override options: Required<ReadTaskOptions>,
   ) {
     super(args, options);
+    this.#unwrapInvalidUtf8 = hasBuiltInUtf8Filter(args);
     // See https://github.com/photostructure/exiftool-vendored.js/issues/147#issuecomment-1642580118
     this.degroup = this.args.includes("-G");
     this.#tags = { SourceFile: sourceFile } as Tags;
@@ -112,10 +117,12 @@ export class ReadTask extends ExifToolTask<Tags> {
       ...options,
     });
     const sourceFile = _path.resolve(filename);
+    const readArgs = toArray(opts.readArgs);
     const args = [
       ...Utf8FilenameCharsetArgs,
       "-json",
-      ...toArray(opts.readArgs),
+      ...readArgs,
+      ...utf8JsonFilterArgs(readArgs),
     ];
     // "-api struct=undef" doesn't work: but it's the same as struct=0:
     args.push("-api", "struct=" + (isNumber(opts.struct) ? opts.struct : "0"));
@@ -165,7 +172,12 @@ export class ReadTask extends ExifToolTask<Tags> {
         /"ExifToolVersion"\s*:\s*(\d+(?:\.\d+)?)/,
         '"ExifToolVersion":"$1"',
       );
-      this.#raw = JSON.parse(versionFixedData)[0];
+      const parsed = JSON.parse(versionFixedData)[0] as Record<string, unknown>;
+      const decoded = this.#unwrapInvalidUtf8
+        ? unwrapInvalidUtf8Tags(parsed)
+        : { tags: parsed };
+      this.#raw = decoded.tags;
+      this.#invalidUtf8Bytes = decoded.invalidUtf8Bytes;
     } catch (jsonError) {
       // TODO: should restart exiftool?
       logger().warn("ExifTool.ReadTask(): Invalid JSON", {
@@ -245,6 +257,16 @@ export class ReadTask extends ExifToolTask<Tags> {
     const { errors, warnings } = errorsAndWarnings(this, tags);
     tags.errors = errors;
     tags.warnings = warnings;
+    if (this.#invalidUtf8Bytes != null) {
+      for (const key of Object.keys(this.#invalidUtf8Bytes)) {
+        if (!Object.hasOwn(tags, key)) {
+          Reflect.deleteProperty(this.#invalidUtf8Bytes, key);
+        }
+      }
+      if (Object.keys(this.#invalidUtf8Bytes).length > 0) {
+        tags.invalidUtf8Bytes = this.#invalidUtf8Bytes;
+      }
+    }
 
     return tags;
   }

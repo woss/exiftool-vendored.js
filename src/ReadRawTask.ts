@@ -5,8 +5,10 @@ import { errorsAndWarnings } from "./ErrorsAndWarnings";
 import { ExifToolOptions } from "./ExifToolOptions";
 import { ExifToolTask } from "./ExifToolTask";
 import { Utf8FilenameCharsetArgs } from "./FilenameCharsetArgs";
+import { unwrapInvalidUtf8Tags } from "./InvalidUtf8Bytes";
 import { pick } from "./Pick";
 import { RawTags } from "./RawTags";
+import { hasBuiltInUtf8Filter, utf8JsonFilterArgs } from "./Utf8JsonFilter";
 
 export const ReadRawTaskOptionFields = [
   "readArgs",
@@ -21,10 +23,14 @@ export const DefaultReadRawTaskOptions = {
 export type ReadRawTaskOptions = Partial<typeof DefaultReadRawTaskOptions>;
 
 export class ReadRawTask extends ExifToolTask<RawTags> {
+  readonly #unwrapInvalidUtf8: boolean;
+
   static for(filename: string, options?: ReadRawTaskOptions): ReadRawTask {
+    const readArgs = options?.readArgs ?? [];
     const args: string[] = [
       ...Utf8FilenameCharsetArgs,
-      ...(options?.readArgs ?? []),
+      ...readArgs,
+      ...utf8JsonFilterArgs(readArgs),
     ];
     const opts = { ...DefaultReadRawTaskOptions, ...options };
     if (!args.includes("-json")) args.push("-json");
@@ -43,6 +49,7 @@ export class ReadRawTask extends ExifToolTask<RawTags> {
     options: Required<ReadRawTaskOptions>,
   ) {
     super(args, options);
+    this.#unwrapInvalidUtf8 = hasBuiltInUtf8Filter(args);
   }
 
   override toString(): string {
@@ -51,10 +58,20 @@ export class ReadRawTask extends ExifToolTask<RawTags> {
 
   protected parse(data: string, err?: Error): RawTags {
     try {
-      const tags = JSON.parse(data)[0];
-      const { errors, warnings } = errorsAndWarnings(this, tags);
+      const parsed = JSON.parse(data)[0] as Record<string, unknown>;
+      const decoded = this.#unwrapInvalidUtf8
+        ? unwrapInvalidUtf8Tags(parsed)
+        : { tags: parsed };
+      const tags = decoded.tags as RawTags;
+      const { errors, warnings } = errorsAndWarnings(
+        this,
+        decoded.tags as { Error?: string; Warning?: string },
+      );
       tags.errors = errors;
       tags.warnings = warnings;
+      if (decoded.invalidUtf8Bytes != null) {
+        tags.invalidUtf8Bytes = decoded.invalidUtf8Bytes;
+      }
       return tags;
     } catch (jsonError) {
       logger().error("ExifTool.ReadRawTask(): Invalid JSON", { data });

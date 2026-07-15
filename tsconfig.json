@@ -2,7 +2,6 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
     /* Visit https://aka.ms/tsconfig.json to read more about this file */
-    "ignoreDeprecations": "6.0",
 
     /* Projects */
     // "incremental": true /* Enable incremental compilation */,
@@ -28,9 +27,9 @@
     // "useDefineForClassFields": true,                  /* Emit ECMAScript-standard-compliant class fields. */
 
     /* Modules */
-    "module": "commonjs" /* Specify what module code is generated. */,
+    "module": "nodenext" /* Emits CommonJS here because package.json sets "type": "commonjs"; TS 7 removed the legacy "node"/"node10" resolution mode. */,
     "rootDir": "./src" /* Specify the root folder within your source files. */,
-    "moduleResolution": "node" /* Specify how TypeScript looks up a file from a given module specifier. */,
+    "moduleResolution": "nodenext" /* Specify how TypeScript looks up a file from a given module specifier. */,
     // "baseUrl": "./",                                  /* Specify the base directory to resolve non-relative module names. */
     // "paths": {},                                      /* Specify a set of entries that re-map imports to additional lookup locations. */
     // "rootDirs": [],                                   /* Allow multiple folders to be treated as one when resolving modules. */

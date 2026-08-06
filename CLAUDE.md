@@ -9,6 +9,9 @@ This is exiftool-vendored.js, a Node.js library that provides cross-platform acc
 ## Key Commands
 
 ```bash
+# Everything that should pass before a release
+make preflight       # or: npm run preflight
+
 # Development
 npm install          # Install dependencies
 npm run compile      # Compile TypeScript to JavaScript

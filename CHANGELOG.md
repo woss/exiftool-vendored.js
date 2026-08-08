@@ -37,6 +37,10 @@ vendored versions of ExifTool match the version that they vendor.
 
 ### v37.2.0
 
+- 🐞 Pull in new exiftool-vendored.pl and exiftool-vendored.exe that have [this
+  patch applied](https://github.com/exiftool/exiftool/issues/458) to avoid
+  orphaned ExifTool processes if the parent process is killed or crashes
+
 - 📦 The published package now contains only runtime output, tag metadata, and
   the standard package documents. Compiled tests and maintainer-only update
   tools are no longer shipped, which removes 130 files from the tarball. Code

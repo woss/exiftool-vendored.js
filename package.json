@@ -41,6 +41,17 @@
     "type": "git",
     "url": "git+https://github.com/photostructure/exiftool-vendored.js.git"
   },
+  "files": [
+    "dist",
+    "!dist/**/*.spec.*",
+    "!dist/ExifTool.parent-death-helper.*",
+    "!dist/update/**",
+    "data",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md"
+  ],
   "keywords": [
     "ExifTool",
     "EXIF",

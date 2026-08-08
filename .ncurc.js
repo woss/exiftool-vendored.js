@@ -6,9 +6,12 @@ module.exports = {
   // Internal release-train packages are reviewed at their source and should
   // be eligible immediately; third-party releases retain the full cooldown.
   cooldown: (packageName) =>
-    ["batch-cluster", "exiftool-vendored.exe", "exiftool-vendored.pl"].includes(
-      packageName,
-    )
+    [
+      "@photostructure/tz-lookup",
+      "batch-cluster",
+      "exiftool-vendored.exe",
+      "exiftool-vendored.pl",
+    ].includes(packageName)
       ? 0
       : 14,
   // Packages we deliberately hold back, with the reason for each.

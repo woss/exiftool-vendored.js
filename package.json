@@ -30,8 +30,8 @@
     "ncu": "ncu -u",
     "update": "run-s ncu update:*",
     "update:install": "npm install",
-    "install:pinact": "go install github.com/suzuki-shunsuke/pinact/v3/cmd/pinact@latest",
-    "update:actions": "pinact run -u --min-age 7",
+    "install:pinact": "go install github.com/suzuki-shunsuke/pinact/v4/cmd/pinact@v4.1.0",
+    "update:actions": "go run github.com/suzuki-shunsuke/pinact/v4/cmd/pinact@v4.1.0 run -u",
     "preflight": "run-s update fmt lint docs:build test"
   },
   "repository": {

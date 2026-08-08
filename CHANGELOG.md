@@ -47,6 +47,11 @@ vendored versions of ExifTool match the version that they vendor.
   that imported `exiftool-vendored/dist/update/*` or a compiled `*.spec.js`
   must stop doing so.
 
+- 📦 Replaced direct npm publishing with a least-privilege, tag-bound release
+  flow. CI now verifies signed tags and the exact package artifact, stages the
+  package behind maintainer 2FA approval, and excludes compiled tests and
+  maintainer tools from the public tarball.
+
 ### v37.1.0
 
 - 📦 Updated to [batch-cluster

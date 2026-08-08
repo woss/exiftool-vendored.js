@@ -1,53 +1,63 @@
-# Releasing new versions of `exiftool-vendored`
+# Release procedure
 
-As of May 2025, the Windows
-[exiftool-vendored.exe](https://github.com/photostructure/exiftool-vendored.exe)
-and POSIX
-[exiftool-vendored.pl](https://github.com/photostructure/exiftool-vendored.pl)
-vendored versions of ExifTool are updated and released automatically.
+Releases use signed Git tags and npm staged publishing. The workflow stages an
+exact package, but a maintainer must approve that package with two-factor
+authentication (2FA) before npm makes it public.
 
-## Automated Dependency Updates
+Do not create or move a release tag manually. Do not run `npm publish` from a
+workstation.
 
-A GitHub Actions workflow automatically checks for dependency updates (including ExifTool packages) periodically and creates pull requests when updates are available. The workflow:
+## Prepare the release
 
-- Updates all dependencies using `npm-check-updates`
-- Creates a pull request with signed commits
-- Includes a detailed diff of changes
-- Allows manual approval and merging
-- Can also be triggered manually via the Actions tab
+1. Decide the version from the consumer-visible change, then add the release
+   notes to `CHANGELOG.md` on `main` under a heading for that exact version.
+2. Push the completed changes and wait for the ordinary `main` build to pass.
+3. Confirm that `main` has not moved to a different commit.
 
-## Release Process
+## Stage the package
 
-### Prerequisites
+1. Open **Build & Prepare Release** in GitHub Actions.
+2. Select **Run workflow** on `main`.
+3. Choose the `patch`, `minor`, or `major` bump that produces the version in
+   the CHANGELOG heading. Nothing verifies this for you, and the tag cannot be
+   moved afterwards.
+4. Wait for **Build & Prepare Release** to finish.
+5. Wait for the tag-bound **Stage npm Release** workflow to finish.
 
-Before releasing, ensure you have:
+The first workflow runs the full test matrix, creates a signed release commit
+and annotated tag, and starts the second workflow at that tag. The second
+workflow validates the tag, builds and verifies the exact tarball, stages it on
+npm, and creates the immutable GitHub release.
 
-1. Configured [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers) for this repository on npmjs.com
-2. Access to trigger GitHub Actions workflows
+## Approve the npm stage
 
-### Automatic Release (Recommended)
+1. Open **Staged Packages** from the npm user menu.
+2. Confirm the package name, version, file list, metadata, checksum evidence,
+   and provenance.
+3. Confirm that the provenance identifies this repository, `publish.yaml`, the
+   release tag, and the signed tag commit.
+4. Approve the staged package with 2FA.
+5. Confirm that npm lists the version publicly.
+6. Confirm that the GitHub release exists and is immutable.
 
-Releases are now handled through GitHub Actions with OIDC trusted publishing:
+## Recover from a failed release
 
-1. Ensure all changes are committed and pushed to `main`
-2. Update the [CHANGELOG.md](https://github.com/photostructure/exiftool-vendored.js/blob/main/CHANGELOG.md)
-3. Go to the [Build & Release workflow](https://github.com/photostructure/exiftool-vendored.js/actions/workflows/build.yml)
-4. Click "Run workflow" and select the version type (patch/minor/major)
-5. The workflow will:
-   - Run the full test matrix (3 OS × 3 Node versions)
-   - Only proceed with release if all tests pass
-   - Use OIDC for secure, token-free npm publishing
-   - Create a GitHub release
-6. Copy the relevant CHANGELOG entries into the new GitHub Release. [Here's an example](https://github.com/photostructure/exiftool-vendored.js/releases/tag/30.0.0).
+- If the pre-tag test fails, fix `main` and start a new release run.
+- If the tag push succeeds but publisher dispatch fails, rerun only the
+  dispatch job or start `publish.yaml` manually at the existing signed tag.
+- If the tagged workflow is defective, fix `main` and release a new version.
+  Never move the existing tag.
+- If the staged contents are wrong, reject the stage and release a new version.
+- If npm publishes a bad release, deprecate it or publish a corrected version.
+  Never overwrite a published version.
 
-### Manual Development Process
+## Local development
 
-For development and testing:
+Dependency resolution requires npm 11.10.0 or newer. Run `make preflight`
+before opening a release pull request. To regenerate tags from the complete
+ExifTool sample corpus, run `npm run mktags ../test-images` before preflight.
 
-1. `git clone` this repo
-2. `npm install`
-3. `npm run mktags ../test-images` # < assumes `../test-images` has the full ExifTool sample image suite
-4. `npm run preflight` (look for lint or documentation generation issues)
-5. `npm run test`
-6. Verify diffs are reasonable, `git commit` and `git push`
-7. Follow the Automatic Release steps above
+`.npmrc` sets `ignore-scripts`, so no lifecycle script runs during an install:
+`npm install` will not build the project, and every `pre`/`post` hook is
+inert. Run `npm run compile` after installing. Scripts here spell out their own
+prerequisites rather than relying on hooks.

@@ -13,11 +13,11 @@ This is exiftool-vendored.js, a Node.js library that provides cross-platform acc
 make preflight       # or: npm run preflight
 
 # Development
-npm install          # Install dependencies
-npm run compile      # Compile TypeScript to JavaScript
+npm install          # Install dependencies (requires npm 11.10 or later)
+npm run compile      # Compile TypeScript to JavaScript (cleans first)
 npm run compile:watch # Watch mode for development
 npm run clean        # Clean build artifacts
-npm run u           # Update dependencies and install
+npm run update       # Update dependencies and install
 
 # Linting & Formatting
 npm run lint        # Run ESLint with TypeScript configuration
@@ -33,10 +33,10 @@ npm run docs        # Generate TypeDoc docs and serve at http://localhost:3000
 npm run docs:build  # Build documentation only (without serving)
 
 # Tag Generation
-npm run mktags ../path/to/images  # Regenerate src/Tags.ts and data/TagMetadata.json (with frequency, mainstream flags, groups, type, and typed) from sample images
+npm run mktags ../path/to/images  # Regenerate src/Tags.ts and data/TagMetadata.json (with frequency, mainstream flags, groups, type, and typed) from sample images; follow with `npm run fmt`
 
 # Release Management
-npm run release     # Run release process (requires proper permissions)
+# Use Build & Prepare Release on GitHub; see RELEASE.md
 ```
 
 **Note**: Documentation is automatically built and deployed to GitHub Pages on every push to main branch via `.github/workflows/docs.yml`.
@@ -55,6 +55,9 @@ npm run release     # Run release process (requires proper permissions)
 
 ## Important Notes
 
+- `.npmrc` sets `ignore-scripts`, so `npm install` does not build and no
+  `pre`/`post` script hook ever runs. Scripts must spell out their own
+  prerequisites; `npm test` and `npm run mktags` compile themselves.
 - Always run `npm run compile` before testing
 - With default settings, `.end()` is optional after awaited script work, but it
   should be awaited when cleanup must finish before the application continues or exits

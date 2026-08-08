@@ -1,20 +1,16 @@
 /** @type {import('npm-check-updates').RunOptions} */
 module.exports = {
-  // Cooldown: 0 days for packages we own (upgrade immediately), 7 days for
-  // third-party packages, to reduce supply-chain attack surface.
-  /** @param {string} packageName - The name of the dependency */
-  cooldown: (packageName) => {
-    const ownPackages = [
-      "batch-cluster",
-      "exiftool-vendored.exe",
-      "exiftool-vendored.pl",
-    ];
-    return packageName.startsWith("@photostructure/") ||
-      packageName.startsWith("@mceachen/") ||
-      ownPackages.includes(packageName)
+  // Ranges are deliberately preserved: this is a library, and exact pins in
+  // `dependencies` would force duplicate installs on every consumer. The
+  // committed lockfile is what pins CI and contributor installs.
+  // Internal release-train packages are reviewed at their source and should
+  // be eligible immediately; third-party releases retain the full cooldown.
+  cooldown: (packageName) =>
+    ["batch-cluster", "exiftool-vendored.exe", "exiftool-vendored.pl"].includes(
+      packageName,
+    )
       ? 0
-      : 7;
-  },
+      : 14,
   // Packages we deliberately hold back, with the reason for each.
   reject: [
     // TypeScript 7 (the native compiler) isn't supported yet by typedoc

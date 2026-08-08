@@ -13,20 +13,17 @@
     "node": ">=22"
   },
   "scripts": {
+    "#scripts": ".npmrc sets ignore-scripts, so pre/post lifecycle hooks never run: every step a script depends on must be spelled out here",
     "clean": "rimraf lib dist coverage .nyc_output",
-    "precompile": "npm run clean",
-    "compile": "tsc",
-    "compile:watch": "npm run precompile && tsc --watch",
-    "premktags": "npm run compile",
-    "mktags": "node dist/update/mktags.js",
-    "postmktags": "npm run fmt",
-    "prelint": "npm run compile",
-    "prepare": "npm run compile",
+    "compile": "run-s clean compile:tsc",
+    "compile:tsc": "tsc",
+    "compile:watch": "npm run clean && tsc --watch",
+    "mktags": "npm run compile && node dist/update/mktags.js",
     "#lint": "the node.js GitHub Action will run `lint` on one node before running `test` with the matrix",
     "lint": "eslint",
     "fmt": "prettier --write .",
-    "pretest": "npm run compile",
-    "test": "mocha dist/**/*.spec.js",
+    "test": "run-s compile test:mocha",
+    "test:mocha": "mocha dist/**/*.spec.js",
     "docs:build": "typedoc",
     "docs:serve": "npm run docs:build && npx serve build/docs",
     "docs": "npm run docs:serve",
@@ -35,7 +32,7 @@
     "update:install": "npm install",
     "install:pinact": "go install github.com/suzuki-shunsuke/pinact/v3/cmd/pinact@latest",
     "update:actions": "pinact run -u --min-age 7",
-    "preflight": "run-s clean update fmt lint docs:build test"
+    "preflight": "run-s update fmt lint docs:build test"
   },
   "repository": {
     "type": "git",

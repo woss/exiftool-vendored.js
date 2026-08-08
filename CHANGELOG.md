@@ -35,6 +35,14 @@ vendored versions of ExifTool match the version that they vendor.
 
 ## History
 
+### v37.2.0
+
+- 📦 The published package now contains only runtime output, tag metadata, and
+  the standard package documents. Compiled tests and maintainer-only update
+  tools are no longer shipped, which removes 130 files from the tarball. Code
+  that imported `exiftool-vendored/dist/update/*` or a compiled `*.spec.js`
+  must stop doing so.
+
 ### v37.1.0
 
 - 📦 Updated to [batch-cluster
